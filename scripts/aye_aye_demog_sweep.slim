@@ -1,0 +1,214 @@
+/// # Gravel Model in SLiM
+/// #### _(with Jump Menu annotations)_
+///
+
+initialize() {
+	
+	defineGlobal("start", clock());
+	defineConstant("N", 23706);
+	defineConstant("bneck_N", 0.265754 * N);
+	defineConstant("bneck_gen", N*15);
+	defineConstant("b_gen", asInteger((bneck_gen+10) - (d_b_gen*N)));
+	//Chromosome with 2 genes, each comprised of 9 130bp exons, 8 1591bp introns, and separated by a 16489bp intergenic region
+	//Total chromosome length: 91161
+	defineConstant("exonLength", 130);
+	defineConstant("exonsPerGene", 9); 
+	defineConstant("intronsPerGene", 8); 
+	defineConstant("intronLength", 1591);
+	defineConstant("geneLength", (exonLength * exonsPerGene) + (intronLength * intronsPerGene));
+	defineConstant("intergenicLength", 16489); 
+	defineConstant("totalGenes", 3);
+	
+	
+	//MUTATION RATE//
+	//fixed recombination rate (Nachman and Crowell 2000 average)
+	if (d_mu_map=='fixed')
+	{
+		mu = 1.52e-8;
+		initializeMutationRate(mu);
+	}
+	//variable rate (from input file)
+	else
+	{
+		lines = readFile(d_mu_map);
+		mu = NULL;
+		coords = NULL;
+		for (line in lines)
+		{
+			components = strsplit(line,"\t");
+			coords = c(coords, asInteger(components[0]));
+			mu = c(mu, asFloat(components[1]));
+		}
+		coords = c(coords[1:(size(coords)-1)] - 1, 91161);
+		initializeMutationRate(mu, coords);
+	}
+	
+	// mutation types:
+	//2Nes = [0, -1, -10, -100, -10000], s = [0.0, -0.0001, -0.001, -0.01, -1]
+	initializeMutationType("m1", 0.5, "f", 0.0); //selectively neutral
+	initializeMutationType("m2", 0.5, "s", "return runif(1, -10/(N*2), -1/(N*2));"); //weakly deleterious (1<2Nes<10)
+	initializeMutationType("m3", 0.5, "s", "return runif(1, -100/(N*2), -10/(N*2));"); //moderately deleterious (10<2Nes<100)
+	initializeMutationType("m4", 0.5, "s", "return runif(1, -1000/(N*2), -100/(N*2));"); //strongly deleterious (100<2Nes<1000)
+	// Genomic elements:
+	initializeGenomicElementType("g1", m1, 1.0); //intergenic
+	initializeGenomicElementType("g2", m1, 1.0); //intron
+	initializeGenomicElementType("g3", c(m1, m2, m3, m4), c(0.5, 0.3, 0.2, 0)); //exon
+	//initializeGenomicElementType("g3", c(m1, m2, m3, m4), c(d_f0, d_f1, d_f2, d_f3)); //exon
+	initializeGenomicElementType("g4", m1, 1.0); //exon synonymous
+	initializeMutationType("m0", 1, "f", d_Nes/(N*2));
+	
+	//Initialise genomic element
+	//Chromosome with {totalGenes} no. ofgenes, each comprised of {exonsPerGene} {exonLength}bp exons;
+	//{intronsPerGene} {intronLength}bp introns, and separated by a {intergenicLength}bp intergenic region
+	//Loop through number of genes
+	for (gene in 1:totalGenes)
+	{
+		//Set gene start
+		geneStart = (gene-1) * (geneLength+intergenicLength) + 1;
+		//Loop through elements within gene (ie number of exons)
+		for (element in 1:exonsPerGene)
+		{
+			//Set exonStart and end coordinates
+			exonStart = geneStart + (exonLength * (element-1)) + (intronLength * (element-1));
+			exonEnd = exonStart+(exonLength-1);
+			for (i in seq(exonStart, exonEnd-1, 3))
+			{
+				//initializeGenomicElement(g3, i, i+1);
+				//initializeGenomicElement(g4, i+2, i+2);
+				initializeGenomicElement(g3, i, i+2);
+			}
+			//Each gene contains one less intron than exons
+			if (element < exonsPerGene)
+			{
+				//Set intron coordinates
+				intronStart = exonStart + exonLength;
+				intronEnd = intronStart+(intronLength-1);
+				initializeGenomicElement(g2, intronStart, intronEnd);
+			}
+		}
+		//Set intergenic region coordinates
+		intergenicStart = exonEnd + 1;
+		intergenicEnd = intergenicStart + (intergenicLength-1);
+		initializeGenomicElement(g1, intergenicStart, intergenicEnd);
+	}
+	
+	
+	//RECOMBINATION RATE//
+	//fixed recombination rate (Payseur and Nachman 2000).
+	if (d_rr_map=='fixed')
+	{
+		rr = 1e-8;
+		initializeRecombinationRate(rr);
+	}
+	//variable rate (from input file - already adjusted for sex-average rate)
+	else
+	{
+		lines = readFile(d_rr_map);
+		rr = NULL;
+		coords = NULL;
+		for (line in lines)
+		{
+			components = strsplit(line,"\t");
+			coords = c(coords, asInteger(components[0]));
+			rr = c(rr, asFloat(components[1]));
+		}
+		rr = rr * 1e-8;
+		coords = c(coords[1:(size(coords)-1)] - 1, 91161);
+		initializeRecombinationRate(rr, coords);
+	}
+
+}
+
+///
+/// **Demography:**
+
+1 early() /* create p1 */ {
+	sim.addSubpop("p1", N);
+	community.rescheduleScriptBlock(s1, start=b_gen, end=b_gen);
+	community.rescheduleScriptBlock(s2, start=b_gen, end=bneck_gen+10);
+	community.rescheduleScriptBlock(s3, start=bneck_gen, end=bneck_gen);
+	community.rescheduleScriptBlock(s4, start=bneck_gen, end=bneck_gen+10);
+	community.rescheduleScriptBlock(s5, start=bneck_gen+10, end=bneck_gen+10);
+}
+
+
+s1 late() {
+    print('Burnin complete; state saved and beneficial introduced');
+    print("Peak Mem Usage: " + usage(peak = T));
+	 print("Runtime: " + (clock()-start));
+	 print('--------------------------------------------------------------');
+	// save the state of the simulation
+	sim.outputFull("states/slim_" + d_repID + ".txt");
+	
+	// introduce the sweep mutation
+	target = sample(p1.genomes, 1);
+	target.addNewDrawnMutation(m0, 37336);
+}
+
+
+s2 late(){
+	mut = sim.mutationsOfType(m0);
+        if (size(mut) == 0)
+        {
+                fixed = (sum(sim.substitutions.mutationType == m0) == 1);
+
+                if (fixed)
+                {
+                        cat(d_repID + ": FIXED\n");
+                        community.deregisterScriptBlock(self);
+                }
+
+                else
+                {
+                        cat(d_repID + ": LOST - RESTARTING\n");
+                        writeFile(d_folder + "/" + d_simID + "_" + d_repID + ".lost", "1", append=T);
+                        // go back to tick 1000
+                        sim.readFromPopulationFile("states/slim_" + d_repID + ".txt");
+
+                        // start a newly seeded run
+                        setSeed(rdunif(1, 0, asInteger(2^62) - 1));
+
+                        // re-introduce the sweep mutation
+                        target = sample(p1.genomes, 1);
+                        target.addNewDrawnMutation(m0, 37336);
+                }
+        }
+}
+
+//10N burn-in is followed by bottleneck
+s3 early() /* end burn-in */ {
+	p1.setSubpopulationSize(asInteger(round(bneck_N)));
+
+}
+
+
+
+s4 late() /* exponential growth */ {
+	t = sim.cycle - bneck_gen;
+	p1_size = round(bneck_N * (1 + 0.0159338)^t);
+	
+	p1.setSubpopulationSize(asInteger(p1_size));
+}
+
+/***/
+/** **Final output:** */
+
+s5 late() {
+	//p1.outputSample(216);
+	//p2.outputSample(198);
+	//p3.outputSample(206);
+	
+//	print("Final generation: " + sim.cycle);	
+//	print("Peak Mem Usage: " + usage(peak = T));
+//	print("Runtime: " + (clock()-start));
+//	print(size(p1.individuals));
+	
+	//p1.outputVCFSample(8, F, "*", d_folder + "/" + d_repID + "_" + d_bp_gen + ".vcf");
+	
+    p1.outputMSSample(100, F, "*", d_folder + "/" + d_simID + "_rep" + d_repID + ".ms", F);
+    //print all fixed mutations
+    sim.outputFixedMutations(d_folder + "/" + d_simID + "_rep" + d_repID + ".fixed", append=F);
+    m0muts = sim.mutationsOfType(m0);
+	 sim.outputMutations(m0muts, d_folder + "/" + d_simID + "_rep" + d_repID + ".beneficial", append=F); 
+}
+
