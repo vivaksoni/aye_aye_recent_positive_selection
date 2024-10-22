@@ -7,8 +7,9 @@ initialize() {
 	defineGlobal("start", clock());
 	defineConstant("N", 11695);
 	defineConstant("bneck_N", 3293);
-	defineConstant("bneck_gen", N*11);
-	defineConstant("b_gen", asInteger(bneck_gen - (d_b_gen*N));
+	defineConstant("bneck_gen", asInteger(N*85));
+	defineConstant("b_gen", asInteger((bneck_gen+10) - (d_b_gen*N)));	
+	defineConstant("Feq", 0.5);
 	//Chromosome with 2 genes, each comprised of 9 130bp exons, 8 1591bp introns, and separated by a 16489bp intergenic region
 	//Total chromosome length: 91161
 	defineConstant("exonLength", 130);
@@ -55,7 +56,7 @@ initialize() {
 	initializeGenomicElementType("g3", c(m1, m2, m3, m4), c(0.5, 0.3, 0.2, 0)); //exon
 	//initializeGenomicElementType("g3", c(m1, m2, m3, m4), c(d_f0, d_f1, d_f2, d_f3)); //exon
 	initializeGenomicElementType("g4", m1, 1.0); //exon synonymous
-	initializeMutationType("m0", 1, "f", d_Nes/(N*2));
+	initializeMutationType("m0", 0.5, "f", 1000/(N*2));
 	
 	//Initialise genomic element
 	//Chromosome with {totalGenes} no. ofgenes, each comprised of {exonsPerGene} {exonLength}bp exons;
@@ -125,10 +126,10 @@ initialize() {
 1 early() /* create p1 */ {
 	sim.addSubpop("p1", N);
 	community.rescheduleScriptBlock(s1, start=b_gen, end=b_gen);
-	community.rescheduleScriptBlock(s2, start=b_gen, end=bneck_gen+10);
+	community.rescheduleScriptBlock(s2, start=b_gen, end=bneck_gen+7);
 	community.rescheduleScriptBlock(s3, start=bneck_gen, end=bneck_gen);
-	community.rescheduleScriptBlock(s4, start=bneck_gen, end=bneck_gen+10);
-	community.rescheduleScriptBlock(s5, start=bneck_gen+10, end=bneck_gen+10);
+	community.rescheduleScriptBlock(s4, start=bneck_gen, end=bneck_gen+7);
+	community.rescheduleScriptBlock(s5, start=bneck_gen+7, end=bneck_gen+7);
 }
 
 
@@ -145,21 +146,20 @@ s1 late() {
 	target.addNewDrawnMutation(m0, 37336);
 }
 
+mutationEffect(m0) {
+        if(sim.mutationFrequencies(p1, mut) < Feq)
+                return ((1 + Feq) - sim.mutationFrequencies(p1, mut) * (1 + mut.selectionCoeff));
+        else if(sim.mutationFrequencies(p1, mut) >= Feq)
+                return ((1 + Feq) - sim.mutationFrequencies(subpop, mut) * (1 - mut.selectionCoeff));
+}
+
 
 s2 late(){
 	mut = sim.mutationsOfType(m0);
-	if (size(mut) == 1)
-	{
-		if (sim.mutationFrequencies(NULL, mut) > 0.1)
-		{
-			cat(d_repID + ": ESTABLISHED\n");
-			community.deregisterScriptBlock(self);
-		}
-	}
-	else
+	if (size(mut) == 0)
 	{
 		cat(d_repID + ": LOST - RESTARTING\n");
-		
+		writeFile(d_folder + "/" + d_simID + "_" + d_repID + ".lost", "1", append=T);
 		// go back to tick 1000
 		sim.readFromPopulationFile("states/slim_" + d_repID + ".txt");
 		
@@ -171,6 +171,8 @@ s2 late(){
 		target.addNewDrawnMutation(m0, 37336);
 	}
 }
+
+//10N 
 
 //10N burn-in is followed by bottleneck
 s3 early() /* end burn-in */ {
