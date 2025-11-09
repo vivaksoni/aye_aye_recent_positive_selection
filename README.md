@@ -1,5 +1,6 @@
 # aye_aye_recent_positive_selection
-Code to run analyses from Soni et al. 2024
+Code to run analyses from Soni V, Terbot JW, Versoza CJ, Pfeifer SP, Jensen JD. 2025. A whole-genome scan for evidence of positive and balancing selection in aye-ayes ( Daubentonia madagascariensis ) utilizing a well-fit evolutionary baseline model. G3: Genes, Genomes, Genetics:jkaf078. 
+
 
 Sweep inference: Input and results files for SweepFinder2 are split between sweep_analysis1.tar.gz and sweep_analysis2.tar.gz
 
